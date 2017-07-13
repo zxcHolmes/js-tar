@@ -1,50 +1,44 @@
-##README.md Sample
-Github项目README.md模板
-README作为说明文件，作用是让浏览者快速、鸟瞰式地了解项目。
-为了做到这点，写README的时候应该注意层次和格式，用Markdown书写为佳。
-一般至少包含三大部分，第一是介绍项目背景和用处，第二是使用方法（包括导入/安装，暴露的调用接口等），第三遵守的协议。
+##README.md 
+js-tar，可以在本地读取tar包，修改自HstarStudio的js-tar项目，原项目可以读取tar包，但是仅限于小的tar包，大的tar包
+比如docker镜像，甚至几百MB大小的，就无法读取了，因为原项目代码逻辑是先把文件全部转换成bytes，这里主要做的修改是利用
+Blob.slice函数进行逐步读取逐步修改，而不是全部读出来，因为全部读出来，内存明显不够。
+主要做的工作是读取tar包里面的文件名，对tar包文件的byte不做保留
+这个项目主要的作用是读取tar包里面有什么文件，好做判断。
+最近有个项目，需要判断docker镜像，而docker镜像的结构是里面有manifest.json和repositories这两个文件。
+虽然还不太严谨，但是对于前端Docker验证镜像的合法性已经足够了。
+支持读取的tar包文件大小可以达到几百MB，甚至几G的大小。
+****************************************************
+translated by google translate
 
-具体可以参照这份模板，模板本身已放到Github。
+Js-tar, you can read the tar package locally, modify the js-tar project from HstarStudio, the original project can read the tar package, but only for small tar packages, large tar packages
+Such as docker mirror, or even hundreds of MB size, can not read, because the original project code logic is the first file into all bytes, where the main changes are made use
+The Blob.slice function is progressively read step by step, rather than reading all, because all read out, the memory is not enough.
+The main thing to do is to read the tar file inside the file name, the tar package file does not save the byte
+The main role of this project is to read what file inside the tar package, so easy to judge.
+Recently there is a project, need to determine the docker mirror, and docker mirror structure is inside the manifest.json and repositories these two files.
+Although it is not too rigorous, but for the front-end Docker verify the legitimacy of the mirror is enough.
+Support to read the tar package file size can reach hundreds of MB, or even a few G size.
 
 ---
-#项目名称
+#ja-tar
 -------------
 
-> 关于我，欢迎关注  
-  博客：[Ben的简书](http://www.jianshu.com/users/8a035c29436c/latest_articles) 微信：[ben_said]()  
- (如果你想打造个人品牌，把自己的介绍放在这里也是可以的)
 
-Github项目README.md模板  
-（项目背景/作用介绍）
-
-####示例:  
-把使用了该项目的案例放在这里。可以放APK下载链接，或者简单放几张截图。  
-（示例一开始就放出来，方便浏览者一眼就看出是不是想找的东西）
-
-###特性（可选）
-- 特性A
-
-- 特性B
-
-###原理说明（可选）
-阐述项目是基于什么思路设计的
-
-
-### 下载安装
-Gradle:  
-``` xml
-compile 'xxx'
+### Usages:
+``` javascript
+<input type="file" accept="application/x-tar" id="inputFile">
+<script type="text/javascript" src="/path/js-tar.js"></script>
+var inputFile= document.getElementById('inputFile');
+inputFile.addEventListener("change",function(event){
+	var tarFile = inputFile.files[0];
+	window.Tar.listFileName(tarFile,function(err,result){
+				if(err){
+					console.log("not a tar");
+				}else {
+					console.log(result);
+				}
+			});
 ```
-(说明项目的配置方法，android开源库多用Gradle导入)
-
-###使用方法
-怎么使用，有哪些步骤哪些接口。
-
-### 注意事项
-比如混淆方法等
-
-###TODO（可选）
-接下来的开发/维护计划。
 
 ## License
-遵守的协议
+MIT
