@@ -1,33 +1,119 @@
+/*
+*modify by zxc 2017-7-4
+*/
 ; (function (window) {
   //ie hook
   if (!FileReader.prototype.readAsBinaryString) {
-    FileReader.prototype.readAsBinaryString = function (fileData) {
-      var binary = "";
-      var pt = this;
-      var reader = new FileReader();
-      reader.onload = function (e) {
-        var bytes = new Uint8Array(reader.result);
-        var length = bytes.byteLength;
-        for (var i = 0; i < length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        //pt.result  - readonly so assign binary
-        pt.content = binary;
-        $(pt).trigger('onloadend');
+      FileReader.prototype.readAsBinaryString = function (fileData) {
+          var binary = "";
+          var pt = this;
+          var reader = new FileReader();
+          reader.onload = function (e) {
+              var bytes = new Uint8Array(reader.result);
+              var length = bytes.byteLength;
+              for (var i = 0; i < length; i++) {
+                  binary += String.fromCharCode(bytes[i]);
+              }
+              //pt.result  - readonly so assign binary
+              pt.content = binary;
+              $(pt).trigger('onloadend');
+          }
+          reader.readAsArrayBuffer(fileData);
       }
-      reader.readAsArrayBuffer(fileData);
-    }
   }
+  var chunkSize=512;
+  var readHeader=function(bytes,entries){
+	  var fileAsBytes = ByteHelper.stringUTF8ToBytes(bytes);
+	  var reader = new ByteStreamLittleEndian(fileAsBytes);
+	  var chunkAsBytes = reader.readBytes(512);
+	  var areAllBytesInChunkZeroes = true;
+      for (var b = 0; b < chunkAsBytes.length; b++) {
+		  if (chunkAsBytes[b] != 0) {
+			areAllBytesInChunkZeroes = false;
+		  }
+      }
+	  if(!areAllBytesInChunkZeroes){
+		  var header = TarFileEntryHeader.fromBytes(chunkAsBytes);
+		  entries.push(header);
+		  var sizeOfDataEntryInBytesUnpadded = header.fileSizeInBytes;
+		  var numberOfChunksOccupiedByDataEntry = Math.ceil(sizeOfDataEntryInBytesUnpadded / chunkSize);
+          var sizeOfDataEntryInBytesPadded = numberOfChunksOccupiedByDataEntry * chunkSize;
+		  return sizeOfDataEntryInBytesPadded;
+	  }else {
+		  return -1;
+	  }
+	  
+  }
+  var blobSlice =function (blob, index, length) {
+		if (index < 0 || length < 0 || index + length > blob.size)
+			throw new RangeError('offset:' + index + ', length:' + length + ', size:' + blob.size);
+		if (blob.slice)
+			return blob.slice(index, index + length);
+		else if (blob.webkitSlice)
+			return blob.webkitSlice(index, index + length);
+		else if (blob.mozSlice)
+			return blob.mozSlice(index, index + length);
+		else if (blob.msSlice)
+			return blob.msSlice(index, index + length);
+	}
+  
+  var readFile2=function(file,callBack){
+	  //console.log(file);
+	  var entries=new Array();
+	  readFile3(file,0,entries,callBack);
+  }
+  
+  var readFile3=function(blobMain,start,entries,callBack){
+	  var fileReader = new FileReader();
+	  fileReader.onloadend = function (e) {
+		  var _fileReader=e.target;
+		  var result = null;
+		  if (_fileReader.readyState === FileReader.DONE) {
+			result = _fileReader.result;
+		  }
+		  if (!result) {
+			result = _fileReader.content;
+		  }
+		  var dataSize=readHeader(result,entries);
+		  if(dataSize==-1){
+			  callBack(null,entries);
+			  return;
+		  }
+		  var end=_fileReader._data[0];
+		  if(end>=blobMain.size){
+			  callBack(null,entries);
+			  return;
+		  }
+		  readFile3(blobMain,end+dataSize,entries,callBack);
+	  };
+	  try{
+		  fileReader.readAsBinaryString(blobSlice(blobMain,start,chunkSize));
+	  }catch(e){
+		  callBack(new Error("not a valid tar"),null);
+		  return ;
+	  }
+	  fileReader._data=new Array();
+	  fileReader._data.push((start+chunkSize));
+  }
+  
   var readFile = function (file, callback) {
+	readFile2(file);
+	return;
     var fileReader = new FileReader();
-    fileReader.onloadend = function () {
+    fileReader.onloadend = function (e) {
+        fileReader=e.target;
       var result = null;
       if (fileReader.readyState === FileReader.DONE) {
         result = fileReader.result;
       }
+	  
+	  
       if (!result) {
         result = fileReader.content;
       }
+	  console.log("readHeader");
+	  readHeader(result);
+	  return ;
       if (callback) {
         callback(result);
       }
@@ -130,6 +216,13 @@ ByteStreamLittleEndian.BitsPerByteTimesThree = ByteStreamLittleEndian.BitsPerByt
 ByteStreamLittleEndian.prototype.hasMoreBytes = function () {
   return (this.byteIndexCurrent < this.bytes.length);
 };
+ByteStreamLittleEndian.prototype.length=function(){
+  return this.bytes.length;	
+}
+
+ByteStreamLittleEndian.prototype.byteIndex=function(){
+  return this.byteIndexCurrent;
+};
 
 ByteStreamLittleEndian.prototype.peekBytes = function (numberOfBytesToRead) {
   var returnValue = [];
@@ -220,6 +313,8 @@ function FileHelper() {
 FileHelper.destroyClickedElement = function (event) {
   document.body.removeChild(event.target);
 };
+
+
 
 FileHelper.loadFileAsBinaryString = function (fileToLoad, contextForCallback, callback) {
   var fileReader = new FileReader();
@@ -414,6 +509,27 @@ function TarFile(fileName, entries) {
 }
 
 TarFile.ChunkSize = 512;
+TarFile.NOT_TAR_FILE=1;
+TarFile.SIZE_NOT_SATISFY=2;
+TarFile.SIZE_SATISFY=3;
+TarFile.judgeBytes=function(bytes){
+	var chunkSize = TarFile.ChunkSize;
+	if(bytes.length<512){
+		throw new error("judge Bytes.length must be positive 512");
+	}
+	var reader = new ByteStreamLittleEndian(bytes);
+	var chunkAsBytes = reader.readBytes(chunkSize);
+	for (var b = 0; b < chunkAsBytes.length; b++) {
+      if (chunkAsBytes[b] != 0) {
+        areAllBytesInChunkZeroes = false;
+      }
+    }
+	if(areAllBytesInChunkZeroes){
+		return {"code":TarFile.NOT_TAR_FILE};
+	}else {
+		
+	}
+}
 
 TarFile.fromBytes = function (fileName, bytes) {
   var reader = new ByteStreamLittleEndian(bytes)
@@ -440,7 +556,7 @@ TarFile.fromBytes = function (fileName, bytes) {
       var numberOfChunksOccupiedByDataEntry = Math.ceil(sizeOfDataEntryInBytesUnpadded / chunkSize);
       var sizeOfDataEntryInBytesPadded = numberOfChunksOccupiedByDataEntry * chunkSize;
       var dataAsBytes = reader.readBytes(sizeOfDataEntryInBytesPadded).slice(0, sizeOfDataEntryInBytesUnpadded);
-      var entry = new TarFileEntry(header, dataAsBytes);
+      var entry = new TarFileEntry(header, []);
       entries.push(entry);
     }
   }
@@ -475,6 +591,10 @@ TarFile.prototype.toString = function () {
       callback(tarFile.getFileList());
     });
   };
+  
+  Tar.listFileName=function(file,callBack){
+	  readFile2(file,callBack);
+  }
   
   Tar.vresion = '0.0.1';
 
